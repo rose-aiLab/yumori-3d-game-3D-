@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Yumori 3D — 灵汤屋</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --gold:#e8b65a; --gold-soft:#f4d894; --cream:#f4ecd9; --cream-dim:#c4b89f;
+    --teal:#5fc3b0; --coral:#ec9170; --rose:#d96a6a; --panel:#2b2046; --panel2:#352956;
+    --line:rgba(244,236,217,.16);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%; overflow:hidden; background:#0e0a1c}
+  body{font-family:"Zen Maru Gothic",system-ui,sans-serif; color:var(--cream); user-select:none}
+  #app{position:fixed; inset:0}
+  #canvas-wrap{position:absolute; inset:0}
+  canvas{display:block}
+
+  /* HUD */
+  #hud{position:absolute; top:14px; left:14px; right:14px; display:flex; gap:14px;
+    align-items:center; pointer-events:none; flex-wrap:wrap}
+  .meters{flex:1; min-width:180px; max-width:340px; display:flex; flex-direction:column; gap:8px;
+    background:rgba(14,10,28,.5); border:1px solid var(--line); border-radius:13px; padding:10px 13px;
+    backdrop-filter:blur(3px)}
+  .mlabel{display:flex; justify-content:space-between; font-size:10.5px; color:var(--cream-dim);
+    letter-spacing:.04em; margin-bottom:3px}
+  .bar{height:7px; border-radius:6px; background:rgba(244,236,217,.12); overflow:hidden}
+  .bar>span{display:block; height:100%; border-radius:6px; transition:width .45s ease, background .45s ease}
+  .tok{background:rgba(14,10,28,.5); border:1px solid var(--line); border-radius:13px; padding:8px 14px;
+    text-align:center; backdrop-filter:blur(3px)}
+  .tok b{font-family:"Shippori Mincho",serif; font-size:20px; color:var(--gold-soft); line-height:1}
+  .tok span{display:block; font-size:9.5px; color:var(--cream-dim); letter-spacing:.1em}
+
+  /* proximity prompt */
+  #prompt{position:absolute; left:50%; bottom:120px; transform:translateX(-50%);
+    background:rgba(14,10,28,.72); border:1px solid var(--line); border-radius:11px;
+    padding:9px 16px; font-size:14px; color:var(--cream); opacity:0; transition:opacity .2s;
+    pointer-events:none; text-align:center; backdrop-filter:blur(3px); white-space:nowrap}
+  #prompt.on{opacity:1}
+  #prompt b{color:var(--gold-soft)}
+
+  /* mobile controls */
+  #controls{position:absolute; inset:0; pointer-events:none; display:none}
+  #stick{position:absolute; left:24px; bottom:30px; width:118px; height:118px; border-radius:50%;
+    background:rgba(20,14,38,.4); border:1.5px solid var(--line); pointer-events:auto;
+    touch-action:none}
+  #knob{position:absolute; left:50%; top:50%; width:50px; height:50px; margin:-25px 0 0 -25px;
+    border-radius:50%; background:rgba(232,182,90,.6); box-shadow:0 0 16px rgba(232,182,90,.4)}
+  #interactBtn{position:absolute; right:26px; bottom:46px; width:88px; height:88px; border-radius:50%;
+    background:rgba(232,182,90,.18); border:2px solid var(--gold); color:var(--gold-soft);
+    font-family:"Shippori Mincho",serif; font-size:14px; pointer-events:auto; touch-action:none;
+    display:flex; align-items:center; justify-content:center; text-align:center; line-height:1.3}
+
+  .hint{position:absolute; left:50%; bottom:16px; transform:translateX(-50%); font-size:11px;
+    color:var(--cream-dim); letter-spacing:.04em; pointer-events:none; text-align:center}
+
+  /* overlays */
+  .overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    padding:20px; background:rgba(10,7,20,.74); backdrop-filter:blur(5px); z-index:10}
+  .overlay.hidden{display:none}
+  .card{width:100%; max-width:440px; background:var(--panel); border:1px solid var(--line);
+    border-radius:18px; padding:22px}
+  .who{font-family:"Shippori Mincho",serif; font-size:19px; color:var(--gold-soft)}
+  .kind{font-size:11.5px; color:var(--cream-dim); letter-spacing:.04em; margin-bottom:12px}
+  .say{font-size:14.5px; line-height:1.7}
+  .clue{display:flex; gap:9px; align-items:flex-start; font-size:13.5px; line-height:1.55; margin-top:9px}
+  .clue::before{content:""; flex:0 0 auto; width:6px; height:6px; border-radius:50%; background:var(--teal);
+    margin-top:7px; box-shadow:0 0 7px var(--teal)}
+  .choose-h{font-size:10.5px; letter-spacing:.12em; color:var(--cream-dim); margin:16px 0 9px}
+  .opts{display:flex; gap:8px; flex-wrap:wrap}
+  .opt{flex:1 1 46%; cursor:pointer; text-align:left; background:var(--panel2); border:1.5px solid transparent;
+    border-radius:11px; padding:10px 11px; color:var(--cream); font-family:inherit; transition:.15s}
+  .opt:hover{border-color:rgba(232,182,90,.4)} .opt.sel{border-color:var(--gold); background:#3d3060}
+  .opt b{display:block; font-size:13.5px; margin-bottom:2px} .opt span{font-size:11px; color:var(--cream-dim)}
+  .heats{display:flex; gap:8px; margin-top:9px}
+  .heat{flex:1; cursor:pointer; text-align:center; padding:10px 4px; border-radius:10px; background:var(--panel2);
+    border:1.5px solid transparent; color:var(--cream); font-family:inherit; font-size:13.5px; transition:.15s}
+  .heat.sel{border-color:var(--gold); background:#3d3060}
+  .result-tag{font-family:"Shippori Mincho",serif; font-size:15px; margin-bottom:9px}
+  .good{color:var(--teal)} .mid{color:var(--gold-soft)} .bad{color:var(--rose)}
+  .ledger{display:flex; gap:18px; margin-top:13px; font-size:12.5px; color:var(--cream-dim)}
+  .ledger b{font-family:"Shippori Mincho",serif} .up{color:var(--teal)} .down{color:var(--rose)}
+  .btns{display:flex; gap:10px; margin-top:18px}
+  .btn{flex:1; cursor:pointer; font-family:inherit; font-size:14px; font-weight:700; padding:12px;
+    border-radius:11px; border:1.5px solid var(--gold); background:transparent; color:var(--gold-soft); transition:.15s}
+  .btn:hover{background:rgba(232,182,90,.1)} .btn:disabled{opacity:.4; cursor:not-allowed}
+  .btn.primary{background:var(--gold); color:#2a1d08; border-color:var(--gold)}
+  .btn.quiet{border-color:var(--line); color:var(--cream-dim)}
+  .small{font-size:11.5px; color:var(--cream-dim); margin-top:12px; line-height:1.5}
+
+  .start-title .jp{font-family:"Shippori Mincho",serif; font-size:14px; color:var(--gold);
+    letter-spacing:.5em; text-align:center}
+  .start-title .en{font-family:"Shippori Mincho",serif; font-size:30px; font-weight:800; text-align:center; margin-top:4px}
+  .start-title .sub{font-size:13px; color:var(--cream-dim); text-align:center; margin-top:8px; line-height:1.7}
+  .end-title{font-family:"Shippori Mincho",serif; font-size:24px; text-align:center; margin-bottom:12px}
+  .end-body{font-size:14.5px; line-height:1.75; text-align:center}
+  .end-stat{font-size:12px; color:var(--cream-dim); text-align:center; margin-top:14px}
+
+  @media (max-width:520px){ .start-title .en{font-size:25px} }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-wrap"></div>
+
+  <div id="hud">
+    <div class="meters">
+      <div>
+        <div class="mlabel"><span>回家之路</span><span id="goalTxt">0 / 40</span></div>
+        <div class="bar"><span id="goalBar" style="width:0%;background:var(--teal)"></span></div>
+      </div>
+      <div>
+        <div class="mlabel"><span>你的名字</span><span id="nameTxt">100</span></div>
+        <div class="bar"><span id="nameBar" style="width:100%;background:var(--gold)"></span></div>
+      </div>
+    </div>
+    <div class="tok"><b id="tokNum">0</b><span>汤券</span></div>
+  </div>
+
+  <div id="prompt"></div>
+
+  <div id="controls">
+    <div id="stick"><div id="knob"></div></div>
+    <div id="interactBtn">互动</div>
+  </div>
+  <div class="hint" id="hint">WASD / 方向键 移动 · 走近灵体按 E 互动</div>
+
+  <!-- bath / greed modal -->
+  <div id="modal" class="overlay hidden"><div class="card" id="modalCard"></div></div>
+
+  <!-- start -->
+  <div id="start" class="overlay">
+    <div class="card">
+      <div class="start-title">
+        <div class="jp">湯守</div>
+        <div class="en">Yumori 3D</div>
+        <div class="sub">在灵汤屋中行走。为每位客人调一池对的热水，<br>把汤券攒够回家——但别在夜里弄丢了自己的名字。</div>
+      </div>
+      <div class="btns"><button class="btn primary" id="enterBtn">走进汤屋</button></div>
+      <div class="small" style="text-align:center">电脑：WASD 或方向键移动，E 键互动。<br>手机：左下摇杆移动，右下按钮互动。</div>
+    </div>
+  </div>
+
+  <!-- end -->
+  <div id="end" class="overlay hidden"><div class="card" id="endCard"></div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============ data ============ */
+const SPIRITS = [
+  { id:'moss', name:'苔背', kind:'一位古老的森林之灵', color:0x6f8f57, big:false, pos:[-7,-3.5],
+    arrival:'一个沉重的绿色身影挪了进来，滴着潮湿的泥土，拖着长长的根须。',
+    clues:['它身上是湿土和百年老树皮的气味。','它在发抖——寒气钻进了根的深处。'],
+    herb:'sweetroot', heat:'warm',
+    story:'暖意渗进苔背的根里，它发出一声长长的、长满青苔的叹息。"一百年来第一次感到春天，"它低声说，往你手心放下一颗绿色的种子。' },
+  { id:'ash', name:'灰雀', kind:'一只烧焦的小鸟之灵', color:0xc2643c, big:false, pos:[6,-6],
+    arrival:'一只小鸟低低地扑进来，羽毛末梢还冒着细细的烟。',
+    clues:['它的羽尖还在闷烧。','一碰到热它就缩起来、轻轻叫。'],
+    herb:'mintleaf', heat:'cool',
+    story:'灰雀沉进清凉的薄荷水里，余烬终于安静下来。它清亮地鸣了一声道谢，飞上房梁去晾干自己。' },
+  { id:'lantern', name:'灯火童', kind:'一团闪烁的火焰之灵', color:0xe8b65a, big:false, pos:[7,4],
+    arrival:'一个火焰做的小孩怯生生地凑近，随着每个不安的念头明明灭灭。',
+    clues:['它的小火苗在发抖——它害怕着什么。','它想要暖意，但只要最温柔的那种，绝不能烈。'],
+    herb:'dreamlily', heat:'warm',
+    story:'裹在梦百合的安宁里，灯火童终于烧得又稳又亮。它把一声柔软的谢意照遍整间汤屋，才飘回家去。' },
+  { id:'brim', name:'盈满者', kind:'一位被堵塞的河神', color:0x6b5d4a, big:true, pos:[-6.5,5.5],
+    arrival:'一团庞大、恶臭的身影从门口涌进来——拖着河泥、淤沙和生锈的人间垃圾。',
+    clues:['它被瓶子、铁丝和百年污垢堵满了。','它需要一池强力的、滚烫的水来冲刷。'],
+    herb:'saltbloom', heat:'hot',
+    story:'你拽出一副自行车架、几只瓶子、一团鱼线——污秽剥落，露出一位闪光的河神。它笑得像奔流的河，向你洒下金子，干干净净地升入夜空。' },
+];
+const GREED = { id:'hollow', name:'空面客', kind:'它付的是金子，不是谢意', color:0xece6dc, pos:[8,-1],
+  arrival:'一个戴着苍白面具的高个身影无声滑入。它摊开一只手，满是金子，向你招手。不必调汤。它只要你留下、收下、再留下。' };
+
+const HERBS = [
+  {id:'sweetroot',name:'甜根',desc:'土性 · 复元'},
+  {id:'mintleaf', name:'薄荷叶',desc:'清凉 · 镇定'},
+  {id:'saltbloom',name:'盐花', desc:'冲刷 · 净化'},
+  {id:'dreamlily',name:'梦百合',desc:'柔和 · 抚慰'},
+];
+const HEATS = [{id:'cool',name:'凉'},{id:'warm',name:'温'},{id:'hot',name:'烫'}];
+
+let state;
+function resetState(){ state = { tokens:0, name:100, goal:40, served:[], busy:false, ended:false }; }
+resetState();
+
+/* ============ three.js scene ============ */
+let scene, camera, renderer, clock, player, gate, boiler;
+const spiritMeshes = [];
+const lanternGlows = [];
+let camLerp = new THREE.Vector3();
+
+function buildScene(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x140e26);
+  scene.fog = new THREE.FogExp2(0x140e26, 0.045);
+
+  camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, 0.1, 100);
+  camera.position.set(0, 10, 13);
+
+  renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+
+  // lights
+  scene.add(new THREE.HemisphereLight(0x4a3f6b, 0x161022, 0.55));
+  const amb = new THREE.AmbientLight(0xb98a4a, 0.35); scene.add(amb);
+  const moon = new THREE.DirectionalLight(0x8a7fc0, 0.4); moon.position.set(6,14,4); scene.add(moon);
+
+  // floor
+  const floorMat = new THREE.MeshStandardMaterial({ color:0x3a2a22, roughness:0.9, metalness:0.05 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(28,28), floorMat);
+  floor.rotation.x = -Math.PI/2; scene.add(floor);
+  // plank seams
+  const seamMat = new THREE.MeshStandardMaterial({ color:0x2a1d18, roughness:1 });
+  for(let i=-6;i<=6;i++){
+    const s = new THREE.Mesh(new THREE.BoxGeometry(28,0.02,0.06), seamMat);
+    s.position.set(0,0.011,i*2); scene.add(s);
+  }
+
+  // perimeter low walls + pillars
+  const woodMat = new THREE.MeshStandardMaterial({ color:0x4a3324, roughness:0.85 });
+  const wallSpecs = [[0,-13,28,1.6,1],[0,13,28,1.6,1],[-13,0,1,1.6,28],[13,0,1,1.6,28]];
+  wallSpecs.forEach(([x,z,w,h,d])=>{
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), woodMat);
+    wall.position.set(x,h/2,z); scene.add(wall);
+  });
+  for(const [x,z] of [[-10,-10],[10,-10],[-10,10],[10,10],[0,-12.4],[0,12.4]]){
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.55,5,12), woodMat);
+    p.position.set(x,2.5,z); scene.add(p);
+  }
+
+  // bath pools
+  makePool(-2.5,-2.5,2.4); makePool(3,3,2.6); makePool(-4,4,2.0);
+
+  // lanterns (warm point lights)
+  for(const [x,z] of [[-9,-3],[9,-3],[-3,9],[5,-9],[0,0]]) makeLantern(x,z);
+
+  // torii exit gate
+  gate = makeTorii(0,11.5);
+
+  // boiler (rest spot)
+  boiler = makeBoiler(-11,-6);
+
+  // spirits
+  SPIRITS.forEach(s=>{ const m = makeSpirit(s); spiritMeshes.push(m); scene.add(m); });
+  // greed guest
+  const gm = makeSpirit(GREED, true); gm.userData.greed = true; spiritMeshes.push(gm); scene.add(gm);
+
+  // player
+  player = makePlayer(); player.position.set(0,0,8); scene.add(player);
+
+  addEventListener('resize', onResize);
+}
+
+function makePool(x,z,r){
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r+0.25,r+0.3,0.5,28),
+    new THREE.MeshStandardMaterial({color:0x4a3324, roughness:0.8}));
+  rim.position.set(x,0.25,z); scene.add(rim);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(r,r,0.42,28),
+    new THREE.MeshStandardMaterial({color:0x2f7d70, emissive:0x1f8a78, emissiveIntensity:0.6,
+      transparent:true, opacity:0.85, roughness:0.3}));
+  water.position.set(x,0.4,z); scene.add(water);
+}
+
+function makeLantern(x,z){
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,3.4,8),
+    new THREE.MeshStandardMaterial({color:0x2c1d14}));
+  post.position.set(x,1.7,z); scene.add(post);
+  const paper = new THREE.Mesh(new THREE.SphereGeometry(0.42,16,12),
+    new THREE.MeshStandardMaterial({color:0xe8b65a, emissive:0xe8a23a, emissiveIntensity:1.0}));
+  paper.scale.y = 1.3; paper.position.set(x,3.5,z); scene.add(paper);
+  const light = new THREE.PointLight(0xffb24d, 0.9, 11, 2);
+  light.position.set(x,3.6,z); scene.add(light);
+  lanternGlows.push({paper, light, base:0.9, phase:Math.random()*6});
+}
+
+function makeTorii(x,z){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({color:0xb8442e, roughness:0.7, emissive:0x000000});
+  const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.32,5,12), mat); pL.position.set(-2.2,2.5,0);
+  const pR = pL.clone(); pR.position.x = 2.2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(6.4,0.5,0.6), mat); top.position.set(0,5.1,0);
+  const tie = new THREE.Mesh(new THREE.BoxGeometry(5.4,0.35,0.45), mat); tie.position.set(0,3.9,0);
+  g.add(pL,pR,top,tie); g.position.set(x,0,z); g.userData.mat = mat; scene.add(g);
+  return g;
+}
+
+function makeBoiler(x,z){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.3,2,16),
+    new THREE.MeshStandardMaterial({color:0x3a2a20, roughness:0.9}));
+  body.position.y = 1;
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5,12,10),
+    new THREE.MeshStandardMaterial({color:0xff7b3a, emissive:0xff6a2a, emissiveIntensity:1.2}));
+  glow.position.y = 0.5;
+  const l = new THREE.PointLight(0xff6a2a,0.7,6,2); l.position.set(0,0.8,0);
+  g.add(body,glow,l); g.position.set(x,0,z); scene.add(g);
+  return g;
+}
+
+function makeSpirit(data, isGreed){
+  const g = new THREE.Group();
+  const r = data.big ? 1.5 : 0.95;
+  if(isGreed){
+    const bodyMat = new THREE.MeshStandardMaterial({color:0x3a3252, roughness:0.7});
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.85,2.6,16), bodyMat);
+    body.position.y = 1.3; g.add(body);
+    const mask = new THREE.Mesh(new THREE.SphereGeometry(0.5,16,14),
+      new THREE.MeshStandardMaterial({color:0xefe9dc, emissive:0x2a2438, emissiveIntensity:0.2}));
+    mask.scale.set(0.85,1.05,0.55); mask.position.set(0,2.4,0.35); g.add(mask);
+    for(const ex of [-0.18,0.18]){
+      const e = new THREE.Mesh(new THREE.SphereGeometry(0.06,8,8),
+        new THREE.MeshStandardMaterial({color:0x2a2438}));
+      e.position.set(ex,2.45,0.78); g.add(e);
+    }
+  } else {
+    const bodyMat = new THREE.MeshStandardMaterial({color:data.color,
+      emissive:data.color, emissiveIntensity:0.28, roughness:0.55});
+    const body = new THREE.Mesh(new THREE.SphereGeometry(r,24,20), bodyMat);
+    body.scale.y = 0.92; body.position.y = r*0.92; g.add(body);
+    for(const ex of [-r*0.32, r*0.32]){
+      const white = new THREE.Mesh(new THREE.SphereGeometry(r*0.16,12,12),
+        new THREE.MeshStandardMaterial({color:0xfdfaf2}));
+      white.position.set(ex, r*1.05, r*0.78); g.add(white);
+      const pup = new THREE.Mesh(new THREE.SphereGeometry(r*0.08,10,10),
+        new THREE.MeshStandardMaterial({color:0x23202c}));
+      pup.position.set(ex, r*1.05, r*0.9); g.add(pup);
+    }
+    if(data.id==='lantern'){ const l=new THREE.PointLight(0xffcf6a,0.8,6,2); l.position.y=1.2; g.add(l); }
+  }
+  g.position.set(data.pos[0], 0, data.pos[1]);
+  g.userData = Object.assign({}, g.userData, { data, home:[data.pos[0],data.pos[1]],
+    bob:Math.random()*6, served:false, leaving:false, greed:!!isGreed });
+  return g;
+}
+
+function makePlayer(){
+  const g = new THREE.Group();
+  const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.46,1.0,14),
+    new THREE.MeshStandardMaterial({color:0xc0413e, roughness:0.7}));
+  robe.position.y = 0.55; g.add(robe);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32,18,16),
+    new THREE.MeshStandardMaterial({color:0xf0c9a0, roughness:0.8}));
+  head.position.y = 1.25; g.add(head);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.34,18,16),
+    new THREE.MeshStandardMaterial({color:0x2a2230, roughness:0.9}));
+  hair.scale.set(1,0.7,1); hair.position.y = 1.42; g.add(hair);
+  g.userData.dir = 0;
+  return g;
+}
+
+function onResize(){
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+/* ============ input ============ */
+const keys = {};
+addEventListener('keydown', e=>{
+  const k = e.key.toLowerCase(); keys[k] = true;
+  if(k==='e'||k===' '||k==='enter'){ e.preventDefault(); tryInteract(); }
+});
+addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+let joy = {active:false, x:0, z:0};
+const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+function stickStart(e){ joy.active=true; stickMove(e); }
+function stickMove(e){
+  if(!joy.active) return;
+  const t = e.touches ? e.touches[0] : e;
+  const r = stick.getBoundingClientRect();
+  let dx = t.clientX - (r.left+r.width/2), dy = t.clientY - (r.top+r.height/2);
+  const max = 42, d = Math.hypot(dx,dy);
+  if(d>max){ dx*=max/d; dy*=max/d; }
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+  joy.x = dx/max; joy.z = dy/max;
+}
+function stickEnd(){ joy.active=false; joy.x=0; joy.z=0; knob.style.transform='translate(0,0)'; }
+stick.addEventListener('touchstart', e=>{e.preventDefault();stickStart(e)}, {passive:false});
+stick.addEventListener('touchmove', e=>{e.preventDefault();stickMove(e)}, {passive:false});
+stick.addEventListener('touchend', stickEnd);
+document.getElementById('interactBtn').addEventListener('touchstart', e=>{e.preventDefault();tryInteract()}, {passive:false});
+document.getElementById('interactBtn').addEventListener('click', tryInteract);
+
+if('ontouchstart' in window){
+  document.getElementById('controls').style.display='block';
+  document.getElementById('hint').textContent='左下摇杆移动 · 走近灵体按右下按钮互动';
+}
+
+/* ============ interaction ============ */
+function dist2(a, x, z){ const dx=a.position.x-x, dz=a.position.z-z; return Math.hypot(dx,dz); }
+function nearest(){
+  const px=player.position.x, pz=player.position.z;
+  let best=null, bd=2.8;
+  for(const m of spiritMeshes){
+    if(m.userData.served || m.userData.leaving || !m.visible) continue;
+    const d = dist2(m,px,pz);
+    if(d<bd){ bd=d; best={type:m.userData.greed?'greed':'spirit', ref:m, d}; }
+  }
+  const dg = dist2(gate,px,pz);
+  if(state.tokens>=state.goal && dg<3.2 && (!best||dg<bd)){ best={type:'gate',d:dg}; }
+  const db = dist2(boiler,px,pz);
+  if(db<2.6 && (!best||db<bd) && state.name<80){ best={type:'boiler',d:db}; }
+  return best;
+}
+function updatePrompt(){
+  const p = document.getElementById('prompt');
+  if(state.busy||state.ended){ p.classList.remove('on'); return; }
+  const n = nearest();
+  if(!n){ p.classList.remove('on'); return; }
+  const key = ('ontouchstart' in window) ? '互动' : 'E';
+  if(n.type==='gate') p.innerHTML = `按 <b>${key}</b> · 结清汤券，离开此地`;
+  else if(n.type==='boiler') p.innerHTML = `按 <b>${key}</b> · 在锅炉边歇息，找回一点自己`;
+  else p.innerHTML = `按 <b>${key}</b> · 招待 <b>${n.ref.userData.data.name}</b>`;
+  p.classList.add('on');
+}
+function tryInteract(){
+  if(state.busy||state.ended) return;
+  const n = nearest(); if(!n) return;
+  if(n.type==='spirit') openSpirit(n.ref);
+  else if(n.type==='greed') openGreed(n.ref);
+  else if(n.type==='boiler') doRest();
+  else if(n.type==='gate') leave();
+}
+
+/* ============ meters ============ */
+function clamp(n){ return Math.max(0,Math.min(100,n)); }
+function changeName(d){ state.name = clamp(state.name+d); if(state.name<=0 && !state.ended) endGame('forgotten'); }
+function updateHUD(){
+  document.getElementById('tokNum').textContent = state.tokens;
+  document.getElementById('goalTxt').textContent = Math.min(state.tokens,state.goal)+' / '+state.goal;
+  document.getElementById('goalBar').style.width = Math.min(100, state.tokens/state.goal*100)+'%';
+  document.getElementById('nameTxt').textContent = state.name;
+  const nb = document.getElementById('nameBar');
+  nb.style.width = state.name+'%';
+  nb.style.background = state.name>60?'var(--gold)':state.name>30?'var(--coral)':'var(--rose)';
+  // glow torii when ready
+  if(gate) gate.userData.mat.emissive.setHex(state.tokens>=state.goal ? 0x5a1a10 : 0x000000);
+}
+
+/* ============ modal flows ============ */
+const modal = document.getElementById('modal'), modalCard = document.getElementById('modalCard');
+function showModal(html){ modalCard.innerHTML = html; modal.classList.remove('hidden'); state.busy=true; }
+function closeModal(){ modal.classList.add('hidden'); state.busy=false; }
+
+let pick = {herb:null, heat:null, spirit:null};
+function openSpirit(m){
+  const s = m.userData.data; pick = {herb:null, heat:null, spirit:m};
+  showModal(`
+    <div class="who">一位客人</div><div class="kind">${s.kind}</div>
+    <div class="say">${s.arrival}</div>
+    ${s.clues.map(c=>`<div class="clue">${c}</div>`).join('')}
+    <div class="btns"><button class="btn primary" onclick="toBath()">去调一池汤</button></div>`);
+}
+function toBath(){
+  const s = pick.spirit.userData.data;
+  const herbs = HERBS.map(h=>`<button class="opt" data-h="${h.id}" onclick="selHerb('${h.id}')"><b>${h.name}</b><span>${h.desc}</span></button>`).join('');
+  const heats = HEATS.map(h=>`<button class="heat" data-t="${h.id}" onclick="selHeat('${h.id}')">${h.name}</button>`).join('');
+  showModal(`
+    <div class="who">为 ${s.name} 调汤</div>
+    <div class="choose-h">加一味药草</div><div class="opts">${herbs}</div>
+    <div class="choose-h">定一池水温</div><div class="heats">${heats}</div>
+    <div class="btns"><button class="btn primary" id="pourBtn" disabled onclick="pour()">注汤</button></div>
+    <div class="small">每调一池汤，都会带走你一点名字。劳作总是如此。</div>`);
+}
+function selHerb(id){ pick.herb=id; document.querySelectorAll('[data-h]').forEach(b=>b.classList.toggle('sel',b.dataset.h===id)); checkReady(); }
+function selHeat(id){ pick.heat=id; document.querySelectorAll('[data-t]').forEach(b=>b.classList.toggle('sel',b.dataset.t===id)); checkReady(); }
+function checkReady(){ document.getElementById('pourBtn').disabled = !(pick.herb&&pick.heat); }
+function pour(){
+  const m = pick.spirit, s = m.userData.data;
+  const herbOK = pick.herb===s.herb, heatOK = pick.heat===s.heat;
+  let tier, gain, cost, body, tag, cls;
+  if(herbOK&&heatOK){ tier='good'; gain=s.big?18:10; cost=4; tag='一池干净的洗涤。'; cls='good'; body=s.story; }
+  else if(herbOK||heatOK){ tier='mid'; gain=4; cost=5; tag='接近了，但还差一点。'; cls='mid';
+    body=`${s.name} 泡了一会儿，平静了些，却没能痊愈。你看得出${herbOK?'水温错了':'药草错了'}。`; }
+  else { tier='bad'; gain=1; cost=6; tag='这池汤错了。'; cls='bad';
+    body=`${s.name} 从水里退开，礼貌地忍了一会儿，仍带着痛楚离开。你读错了它。`; }
+  state.tokens += gain;
+  if(tier==='good'){ m.userData.served=true; m.userData.leaving=true; }
+  changeName(-cost); updateHUD();
+  const done = state.ended ? '' : `<div class="btns"><button class="btn primary" onclick="closeModal()">结束这次招待</button></div>`;
+  showModal(`<div class="result-tag ${cls}">${tag}</div><div class="say">${body}</div>
+    <div class="ledger"><div>汤券 <b class="up">+${gain}</b></div><div>名字 <b class="down">−${cost}</b></div></div>${done}`);
+  if(state.ended) setTimeout(closeModal, 30);
+}
+
+function openGreed(m){
+  pick.spirit = m;
+  showModal(`<div class="who">${GREED.name}</div><div class="kind">${GREED.kind}</div>
+    <div class="say">${GREED.arrival}</div>
+    <div class="btns">
+      <button class="btn primary" onclick="greed('take')">收下金子</button>
+      <button class="btn quiet" onclick="greed('send')">送它离开</button></div>
+    <div class="small">来得快的钱，比老实做工快得多——但它吃的是你。</div>`);
+}
+function greed(choice){
+  const m = pick.spirit;
+  let body, tag, cls, ledger;
+  if(choice==='take'){ state.tokens+=20; changeName(-15); tag='你收下了金子。'; cls='mid';
+    body='空面客把钱币倒进你手里，比一星期的老实活儿还多。但汤屋暗了一分，别的灵体纷纷后退，你也离最初走进这扇门的那个孩子更远了一点。';
+    ledger=`<div>汤券 <b class="up">+20</b></div><div>名字 <b class="down">−15</b></div>`;
+    m.userData.served=true; m.userData.leaving=true; }
+  else { changeName(+4); tag='你温柔地送它离开。'; cls='good';
+    body='你鞠了一躬，把它的手覆在它自己的金子上合拢，领它回到黑暗里。它无声地离开了。汤屋暖了些，你也——稍稍——想起了自己为何而来。';
+    ledger=`<div>汤券 <b>+0</b></div><div>名字 <b class="up">+4</b></div>`;
+    m.userData.served=true; m.userData.leaving=true; }
+  updateHUD();
+  const done = state.ended ? '' : `<div class="btns"><button class="btn primary" onclick="closeModal()">结束</button></div>`;
+  showModal(`<div class="result-tag ${cls}">${tag}</div><div class="say">${body}</div><div class="ledger">${ledger}</div>${done}`);
+  if(state.ended) setTimeout(closeModal,30);
+}
+
+function doRest(){
+  state.name = Math.min(80, state.name+10); updateHUD();
+  showModal(`<div class="who">你在锅炉边歇息</div>
+    <div class="say">你靠着锅炉的暖意坐下，让自己想起一些小事——一条街、一个声音、母亲给你起的名字。一点点的你，回来了。</div>
+    <div class="ledger"><div>名字 <b class="up">+10</b></div></div>
+    <div class="btns"><button class="btn primary" onclick="closeModal()">起身</button></div>`);
+}
+
+function leave(){ endGame(state.name>=60?'good':'bittersweet'); }
+
+/* ============ endings ============ */
+function endGame(type){
+  state.ended = true; state.busy = true; closeModal();
+  let title, body;
+  if(type==='good'){ title='你想起了自己的名字。';
+    body='你放下最后一枚汤券，把自己的名字念出声——它仍然合身。门滑开，外面是明亮、平凡的清晨，你完完整整地走出了灵界。'; }
+  else if(type==='bittersweet'){ title='你离开了——大半个你。';
+    body='你赎清了债，门外是清晨。但有什么留在了蒸汽里：一段记忆、一点柔软、那个完整的你。你回了家，却轻得不太对劲。'; }
+  else { title='汤屋把你留下了。';
+    body='在那些漫长的夜里，你不知何时已经忘了自己当初为何想离开。你系上围裙，去调下一池汤，心满意足。这正是此地的危险。'; }
+  document.getElementById('endCard').innerHTML = `
+    <div class="end-title">${title}</div><div class="end-body">${body}</div>
+    <div class="end-stat">招待过的灵体：${state.served.length}</div>
+    <div class="btns"><button class="btn primary" onclick="restart()">再来一次</button></div>`;
+  document.getElementById('end').classList.remove('hidden');
+}
+function restart(){
+  resetState();
+  spiritMeshes.forEach(m=>{
+    m.userData.served=false; m.userData.leaving=false; m.visible=true;
+    m.position.set(m.userData.home[0],0,m.userData.home[1]);
+    m.scale.set(1,1,1);
+  });
+  player.position.set(0,0,8);
+  updateHUD();
+  document.getElementById('end').classList.add('hidden');
+}
+
+/* ============ loop ============ */
+const SPEED = 5.2, BOUND = 11.5;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // movement
+  if(!state.busy && !state.ended){
+    let mx=0, mz=0;
+    if(keys['w']||keys['arrowup']) mz-=1;
+    if(keys['s']||keys['arrowdown']) mz+=1;
+    if(keys['a']||keys['arrowleft']) mx-=1;
+    if(keys['d']||keys['arrowright']) mx+=1;
+    if(joy.active){ mx=joy.x; mz=joy.z; }
+    const len = Math.hypot(mx,mz);
+    if(len>0.05){
+      mx/=len||1; mz/=len||1;
+      player.position.x = Math.max(-BOUND, Math.min(BOUND, player.position.x + mx*SPEED*dt));
+      player.position.z = Math.max(-BOUND, Math.min(BOUND, player.position.z + mz*SPEED*dt));
+      const target = Math.atan2(mx, mz);
+      let d = target - player.userData.dir;
+      while(d>Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2;
+      player.userData.dir += d*Math.min(1, dt*12);
+      player.rotation.y = player.userData.dir;
+      player.position.y = Math.abs(Math.sin(clock.elapsedTime*9))*0.08;
+    } else player.position.y += (0-player.position.y)*0.2;
+  }
+
+  // camera follow (fixed angle)
+  camLerp.set(player.position.x, 10, player.position.z+13);
+  camera.position.lerp(camLerp, Math.min(1, dt*4));
+  camera.lookAt(player.position.x, 1.2, player.position.z-1);
+
+  // spirits bob / leave
+  for(const m of spiritMeshes){
+    if(m.userData.leaving){
+      m.position.y += dt*1.6; m.scale.multiplyScalar(1 - dt*1.2);
+      if(m.scale.x < 0.06){ m.visible=false; m.userData.leaving=false;
+        if(!state.served.includes(m.userData.data.id)) state.served.push(m.userData.data.id); }
+    } else if(m.visible){
+      m.userData.bob += dt;
+      m.position.y = Math.sin(m.userData.bob*1.6)*0.16 + 0.16;
+      m.rotation.y = Math.sin(m.userData.bob*0.5)*0.18;
+    }
+  }
+  // lantern flicker
+  for(const L of lanternGlows){
+    L.phase += dt;
+    const f = 0.85 + Math.sin(L.phase*3.1)*0.13;
+    L.light.intensity = L.base*f;
+    L.paper.material.emissiveIntensity = f;
+  }
+
+  updatePrompt();
+  renderer.render(scene, camera);
+}
+
+/* ============ boot ============ */
+clock = new THREE.Clock();
+buildScene();
+updateHUD();
+animate();
+
+document.getElementById('enterBtn').addEventListener('click', ()=>{
+  document.getElementById('start').classList.add('hidden');
+});
+</script>
+</body>
+</html>
